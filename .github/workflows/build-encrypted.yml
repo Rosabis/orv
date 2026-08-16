@@ -1,0 +1,589 @@
+name: Build encrypted source
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master, main, test ]
+
+env:
+  SOURCE_ARCHIVE: orv.7z
+  SOURCE_PASSWORD: ${{ secrets.SOURCE_7Z_PASSWORD }}
+  ARTIFACT_PASSWORD: ${{ secrets.ARTIFACT_7Z_PASSWORD }}
+
+jobs:
+  build-linux-amd64:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc make patchelf libunicorn-dev libsdl2-dev p7zip-full
+
+    - name: Extract source
+      run: |
+        set -euo pipefail
+        test -n "$SOURCE_PASSWORD"
+        WORKSPACE="$(pwd)"
+        SOURCE_DIR="$WORKSPACE/_source"
+        echo "WORKSPACE=$WORKSPACE" >> "$GITHUB_ENV"
+        rm -rf "$SOURCE_DIR"
+        mkdir -p "$SOURCE_DIR"
+        7z x "$WORKSPACE/$SOURCE_ARCHIVE" "-p$SOURCE_PASSWORD" -o"$SOURCE_DIR" -y
+        PROJECT_DIR="$SOURCE_DIR"
+        if [ ! -f "$PROJECT_DIR/Makefile" ]; then
+          PROJECT_DIR="$(find "$SOURCE_DIR" -maxdepth 2 -name Makefile -print -quit | xargs dirname)"
+        fi
+        test -f "$PROJECT_DIR/Makefile"
+        echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+    - name: Build
+      run: |
+        cd "$PROJECT_DIR"
+        mkdir -p bin
+        make
+        file bin/main
+
+    - name: Package
+      run: |
+        set -euo pipefail
+        cd "$PROJECT_DIR"
+        DIST=dist/linux-amd64
+        mkdir -p "$DIST/lib"
+        cp -f bin/main "$DIST/"
+        test -f wasm/dist/fs/cfunction.ext || { echo "missing wasm/dist/fs runtime assets"; ls -la wasm/dist/fs || true; exit 1; }
+        cp -f wasm/dist/fs/cfunction.ext "$DIST/"
+        cp -R wasm/dist/fs/mythroad "$DIST/"
+        test -f wasm/dist/fs/cfunction_mini.ext || { echo "missing wasm/dist/fs/cfunction_mini.ext"; ls -la wasm/dist/fs || true; exit 1; }
+        cp -f wasm/dist/fs/cfunction_mini.ext "$DIST/"
+        test -f wasm/dist/fs/mythroad/cookie.mrp || { echo "missing wasm/dist/fs/mythroad/cookie.mrp"; ls -la wasm/dist/fs/mythroad || true; exit 1; }
+        cp -f wasm/dist/fs/mythroad/cookie.mrp "$DIST/mythroad/"
+        bundle_linux_libs() {
+          local target="$1"
+          local libdir="$2"
+          ldd "$target" | awk '!/ld-linux|libc.so|libm.so|libpthread.so|librt.so|libdl.so/ && /=>/ { print $3 }' | while read -r lib; do
+            test -n "$lib" || continue
+            local name dest
+            name="$(basename "$lib")"
+            dest="$libdir/$name"
+            if [ ! -f "$dest" ]; then
+              cp -L "$lib" "$dest"
+              bundle_linux_libs "$dest" "$libdir"
+            fi
+          done
+        }
+        bundle_linux_libs "$DIST/main" "$DIST/lib"
+        patchelf --set-rpath '$ORIGIN/lib' "$DIST/main"
+        for lib in "$DIST/lib"/*; do
+          patchelf --set-rpath '$ORIGIN' "$lib" 2>/dev/null || true
+        done
+        ldd "$DIST/main"
+        ls -la "$DIST/" "$DIST/lib/"
+
+    - name: Encrypt artifact
+      run: |
+        set -euo pipefail
+        cd "$PROJECT_DIR"
+        test -n "$ARTIFACT_PASSWORD"
+        mkdir -p encrypted
+        7z a -t7z -mhe=on "-p$ARTIFACT_PASSWORD" encrypted/linux-amd64.7z dist/linux-amd64
+        mkdir -p "$WORKSPACE/artifacts"
+        cp -f encrypted/linux-amd64.7z "$WORKSPACE/artifacts/"
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-amd64-encrypted
+        path: ${{ github.workspace }}/artifacts/linux-amd64.7z
+
+  build-linux-arm64:
+    runs-on: ubuntu-24.04-arm
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc make patchelf libunicorn-dev libsdl2-dev p7zip-full
+
+    - name: Extract source
+      run: |
+        set -euo pipefail
+        test -n "$SOURCE_PASSWORD"
+        WORKSPACE="$(pwd)"
+        SOURCE_DIR="$WORKSPACE/_source"
+        echo "WORKSPACE=$WORKSPACE" >> "$GITHUB_ENV"
+        rm -rf "$SOURCE_DIR"
+        mkdir -p "$SOURCE_DIR"
+        7z x "$WORKSPACE/$SOURCE_ARCHIVE" "-p$SOURCE_PASSWORD" -o"$SOURCE_DIR" -y
+        PROJECT_DIR="$SOURCE_DIR"
+        if [ ! -f "$PROJECT_DIR/Makefile" ]; then
+          PROJECT_DIR="$(find "$SOURCE_DIR" -maxdepth 2 -name Makefile -print -quit | xargs dirname)"
+        fi
+        test -f "$PROJECT_DIR/Makefile"
+        echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+    - name: Build
+      run: |
+        cd "$PROJECT_DIR"
+        mkdir -p bin
+        make
+        file bin/main
+
+    - name: Package
+      run: |
+        set -euo pipefail
+        cd "$PROJECT_DIR"
+        DIST=dist/linux-arm64
+        mkdir -p "$DIST/lib"
+        cp -f bin/main "$DIST/"
+        test -f wasm/dist/fs/cfunction.ext || { echo "missing wasm/dist/fs runtime assets"; ls -la wasm/dist/fs || true; exit 1; }
+        cp -f wasm/dist/fs/cfunction.ext "$DIST/"
+        cp -R wasm/dist/fs/mythroad "$DIST/"
+        test -f wasm/dist/fs/cfunction_mini.ext || { echo "missing wasm/dist/fs/cfunction_mini.ext"; ls -la wasm/dist/fs || true; exit 1; }
+        cp -f wasm/dist/fs/cfunction_mini.ext "$DIST/"
+        test -f wasm/dist/fs/mythroad/cookie.mrp || { echo "missing wasm/dist/fs/mythroad/cookie.mrp"; ls -la wasm/dist/fs/mythroad || true; exit 1; }
+        cp -f wasm/dist/fs/mythroad/cookie.mrp "$DIST/mythroad/"
+        bundle_linux_libs() {
+          local target="$1"
+          local libdir="$2"
+          ldd "$target" | awk '!/ld-linux|libc.so|libm.so|libpthread.so|librt.so|libdl.so/ && /=>/ { print $3 }' | while read -r lib; do
+            test -n "$lib" || continue
+            local name dest
+            name="$(basename "$lib")"
+            dest="$libdir/$name"
+            if [ ! -f "$dest" ]; then
+              cp -L "$lib" "$dest"
+              bundle_linux_libs "$dest" "$libdir"
+            fi
+          done
+        }
+        bundle_linux_libs "$DIST/main" "$DIST/lib"
+        patchelf --set-rpath '$ORIGIN/lib' "$DIST/main"
+        for lib in "$DIST/lib"/*; do
+          patchelf --set-rpath '$ORIGIN' "$lib" 2>/dev/null || true
+        done
+        ldd "$DIST/main"
+        ls -la "$DIST/" "$DIST/lib/"
+
+    - name: Encrypt artifact
+      run: |
+        set -euo pipefail
+        cd "$PROJECT_DIR"
+        test -n "$ARTIFACT_PASSWORD"
+        mkdir -p encrypted
+        7z a -t7z -mhe=on "-p$ARTIFACT_PASSWORD" encrypted/linux-arm64.7z dist/linux-arm64
+        mkdir -p "$WORKSPACE/artifacts"
+        cp -f encrypted/linux-arm64.7z "$WORKSPACE/artifacts/"
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-arm64-encrypted
+        path: ${{ github.workspace }}/artifacts/linux-arm64.7z
+
+  build-macos-arm64:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      env:
+        HOMEBREW_NO_AUTO_UPDATE: 1
+        HOMEBREW_NO_INSTALL_CLEANUP: 1
+        HOMEBREW_NO_ANALYTICS: 1
+      run: brew install unicorn sdl2 sdl3 make p7zip
+
+    - name: Extract source
+      run: |
+        set -euo pipefail
+        test -n "$SOURCE_PASSWORD"
+        WORKSPACE="$(pwd)"
+        SOURCE_DIR="$WORKSPACE/_source"
+        echo "WORKSPACE=$WORKSPACE" >> "$GITHUB_ENV"
+        rm -rf "$SOURCE_DIR"
+        mkdir -p "$SOURCE_DIR"
+        7z x "$WORKSPACE/$SOURCE_ARCHIVE" "-p$SOURCE_PASSWORD" -o"$SOURCE_DIR" -y
+        PROJECT_DIR="$SOURCE_DIR"
+        if [ ! -f "$PROJECT_DIR/Makefile" ]; then
+          PROJECT_DIR="$(find "$SOURCE_DIR" -maxdepth 2 -name Makefile -print -quit | xargs dirname)"
+        fi
+        test -f "$PROJECT_DIR/Makefile"
+        echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+    - name: Build
+      run: |
+        cd "$PROJECT_DIR"
+        mkdir -p bin
+        make
+        file bin/main
+
+    - name: Package
+      run: |
+        set -euo pipefail
+        cd "$PROJECT_DIR"
+        DIST=dist/macos-arm64
+        mkdir -p "$DIST/lib"
+        cp -f bin/main "$DIST/"
+        test -f wasm/dist/fs/cfunction.ext || { echo "missing wasm/dist/fs runtime assets"; ls -la wasm/dist/fs || true; exit 1; }
+        cp -f wasm/dist/fs/cfunction.ext "$DIST/"
+        cp -R wasm/dist/fs/mythroad "$DIST/"
+        test -f wasm/dist/fs/cfunction_mini.ext || { echo "missing wasm/dist/fs/cfunction_mini.ext"; ls -la wasm/dist/fs || true; exit 1; }
+        cp -f wasm/dist/fs/cfunction_mini.ext "$DIST/"
+        test -f wasm/dist/fs/mythroad/cookie.mrp || { echo "missing wasm/dist/fs/mythroad/cookie.mrp"; ls -la wasm/dist/fs/mythroad || true; exit 1; }
+        cp -f wasm/dist/fs/mythroad/cookie.mrp "$DIST/mythroad/"
+        bundle_homebrew_lib() {
+          local src="$1"
+          local name
+          name="$(basename "$src")"
+          local dest="$DIST/lib/$name"
+          if [ -f "$dest" ]; then
+            return 1
+          fi
+          cp -L "$src" "$dest"
+          install_name_tool -id "@executable_path/lib/$name" "$dest"
+          return 0
+        }
+        rewrite_dep() {
+          local target="$1"
+          local from="$2"
+          install_name_tool -change "$from" "@executable_path/lib/$(basename "$from")" "$target" 2>/dev/null || true
+        }
+        SDL3_PREFIX="$(brew --prefix sdl3)"
+        shopt -s nullglob
+        for lib in "$SDL3_PREFIX"/lib/libSDL3*.dylib; do
+          bundle_homebrew_lib "$lib" || true
+        done
+        changed=1
+        while [ "$changed" -ne 0 ]; do
+          changed=0
+          scan_targets=("$DIST/main")
+          for lib in "$DIST/lib"/*; do
+            scan_targets+=("$lib")
+          done
+          for target in "${scan_targets[@]}"; do
+            while read -r dep; do
+              test -n "$dep" || continue
+              if bundle_homebrew_lib "$dep"; then
+                changed=1
+              fi
+              rewrite_dep "$target" "$dep"
+            done < <(otool -L "$target" | awk 'NF && $1 ~ /^\/(opt\/homebrew|usr\/local)\// { print $1 }')
+          done
+        done
+        install_name_tool -add_rpath @executable_path/lib "$DIST/main" 2>/dev/null || true
+        shopt -s nullglob
+        for lib in "$DIST/lib"/*; do
+          install_name_tool -add_rpath @executable_path/lib "$lib" 2>/dev/null || true
+        done
+        for lib in "$DIST/lib"/*; do
+          codesign --force --sign - --timestamp=none "$lib"
+        done
+        codesign --force --sign - --timestamp=none "$DIST/main"
+        codesign --verify --verbose=2 "$DIST/main"
+        otool -L "$DIST/main"
+        ls -la "$DIST/" "$DIST/lib/"
+
+    - name: Encrypt artifact
+      run: |
+        set -euo pipefail
+        cd "$PROJECT_DIR"
+        test -n "$ARTIFACT_PASSWORD"
+        mkdir -p encrypted
+        7z a -t7z -mhe=on "-p$ARTIFACT_PASSWORD" encrypted/macos-arm64.7z dist/macos-arm64
+        mkdir -p "$WORKSPACE/artifacts"
+        cp -f encrypted/macos-arm64.7z "$WORKSPACE/artifacts/"
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-arm64-encrypted
+        path: ${{ github.workspace }}/artifacts/macos-arm64.7z
+
+  build-macos-amd64:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rosetta
+      run: softwareupdate --install-rosetta --agree-to-license
+
+    - name: Install x86_64 dependencies
+      env:
+        HOMEBREW_NO_AUTO_UPDATE: 1
+        HOMEBREW_NO_INSTALL_CLEANUP: 1
+        HOMEBREW_NO_ANALYTICS: 1
+      run: |
+        if [ ! -x /usr/local/bin/brew ]; then
+          NONINTERACTIVE=1 arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        fi
+        eval "$(/usr/local/bin/brew shellenv)"
+        arch -x86_64 brew install unicorn sdl2 sdl3 make p7zip
+
+    - name: Extract source
+      run: |
+        set -euo pipefail
+        eval "$(/usr/local/bin/brew shellenv)"
+        test -n "$SOURCE_PASSWORD"
+        WORKSPACE="$(pwd)"
+        SOURCE_DIR="$WORKSPACE/_source"
+        echo "WORKSPACE=$WORKSPACE" >> "$GITHUB_ENV"
+        rm -rf "$SOURCE_DIR"
+        mkdir -p "$SOURCE_DIR"
+        7z x "$WORKSPACE/$SOURCE_ARCHIVE" "-p$SOURCE_PASSWORD" -o"$SOURCE_DIR" -y
+        PROJECT_DIR="$SOURCE_DIR"
+        if [ ! -f "$PROJECT_DIR/Makefile" ]; then
+          PROJECT_DIR="$(find "$SOURCE_DIR" -maxdepth 2 -name Makefile -print -quit | xargs dirname)"
+        fi
+        test -f "$PROJECT_DIR/Makefile"
+        echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+    - name: Build
+      run: |
+        eval "$(/usr/local/bin/brew shellenv)"
+        cd "$PROJECT_DIR"
+        mkdir -p bin
+        arch -x86_64 make
+        file bin/main
+
+    - name: Package
+      run: |
+        set -euo pipefail
+        eval "$(/usr/local/bin/brew shellenv)"
+        cd "$PROJECT_DIR"
+        DIST=dist/macos-amd64
+        mkdir -p "$DIST/lib"
+        cp -f bin/main "$DIST/"
+        test -f wasm/dist/fs/cfunction.ext || { echo "missing wasm/dist/fs runtime assets"; ls -la wasm/dist/fs || true; exit 1; }
+        cp -f wasm/dist/fs/cfunction.ext "$DIST/"
+        cp -R wasm/dist/fs/mythroad "$DIST/"
+        test -f wasm/dist/fs/cfunction_mini.ext || { echo "missing wasm/dist/fs/cfunction_mini.ext"; ls -la wasm/dist/fs || true; exit 1; }
+        cp -f wasm/dist/fs/cfunction_mini.ext "$DIST/"
+        test -f wasm/dist/fs/mythroad/cookie.mrp || { echo "missing wasm/dist/fs/mythroad/cookie.mrp"; ls -la wasm/dist/fs/mythroad || true; exit 1; }
+        cp -f wasm/dist/fs/mythroad/cookie.mrp "$DIST/mythroad/"
+        bundle_homebrew_lib() {
+          local src="$1"
+          local name
+          name="$(basename "$src")"
+          local dest="$DIST/lib/$name"
+          if [ -f "$dest" ]; then
+            return 1
+          fi
+          cp -L "$src" "$dest"
+          install_name_tool -id "@executable_path/lib/$name" "$dest"
+          return 0
+        }
+        rewrite_dep() {
+          local target="$1"
+          local from="$2"
+          install_name_tool -change "$from" "@executable_path/lib/$(basename "$from")" "$target" 2>/dev/null || true
+        }
+        SDL3_PREFIX="$(arch -x86_64 brew --prefix sdl3)"
+        shopt -s nullglob
+        for lib in "$SDL3_PREFIX"/lib/libSDL3*.dylib; do
+          bundle_homebrew_lib "$lib" || true
+        done
+        changed=1
+        while [ "$changed" -ne 0 ]; do
+          changed=0
+          scan_targets=("$DIST/main")
+          for lib in "$DIST/lib"/*; do
+            scan_targets+=("$lib")
+          done
+          for target in "${scan_targets[@]}"; do
+            while read -r dep; do
+              test -n "$dep" || continue
+              if bundle_homebrew_lib "$dep"; then
+                changed=1
+              fi
+              rewrite_dep "$target" "$dep"
+            done < <(otool -L "$target" | awk 'NF && $1 ~ /^\/usr\/local\// { print $1 }')
+          done
+        done
+        install_name_tool -add_rpath @executable_path/lib "$DIST/main" 2>/dev/null || true
+        shopt -s nullglob
+        for lib in "$DIST/lib"/*; do
+          install_name_tool -add_rpath @executable_path/lib "$lib" 2>/dev/null || true
+        done
+        for lib in "$DIST/lib"/*; do
+          codesign --force --sign - --timestamp=none "$lib"
+        done
+        codesign --force --sign - --timestamp=none "$DIST/main"
+        codesign --verify --verbose=2 "$DIST/main"
+        otool -L "$DIST/main"
+        ls -la "$DIST/" "$DIST/lib/"
+
+    - name: Encrypt artifact
+      run: |
+        set -euo pipefail
+        cd "$PROJECT_DIR"
+        test -n "$ARTIFACT_PASSWORD"
+        mkdir -p encrypted
+        7z a -t7z -mhe=on "-p$ARTIFACT_PASSWORD" encrypted/macos-amd64.7z dist/macos-amd64
+        mkdir -p "$WORKSPACE/artifacts"
+        cp -f encrypted/macos-amd64.7z "$WORKSPACE/artifacts/"
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-amd64-encrypted
+        path: ${{ github.workspace }}/artifacts/macos-amd64.7z
+
+  build-windows-amd64:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up MSYS2
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: MINGW64
+        install: >-
+          make
+          p7zip
+          mingw-w64-x86_64-gcc
+          mingw-w64-x86_64-make
+          mingw-w64-x86_64-unicorn
+          mingw-w64-x86_64-SDL2
+
+    - name: Extract source
+      run: |
+        set -euo pipefail
+        test -n "$SOURCE_PASSWORD"
+        WORKSPACE="$(pwd)"
+        SOURCE_DIR="$WORKSPACE/_source"
+        echo "WORKSPACE=$WORKSPACE" >> "$GITHUB_ENV"
+        rm -rf "$SOURCE_DIR"
+        mkdir -p "$SOURCE_DIR"
+        7z x "$WORKSPACE/$SOURCE_ARCHIVE" "-p$SOURCE_PASSWORD" -o"$SOURCE_DIR" -y
+        PROJECT_DIR="$SOURCE_DIR"
+        if [ ! -f "$PROJECT_DIR/Makefile" ]; then
+          PROJECT_DIR="$(find "$SOURCE_DIR" -maxdepth 2 -name Makefile -print -quit | xargs dirname)"
+        fi
+        test -f "$PROJECT_DIR/Makefile"
+        echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+    - name: Build
+      run: |
+        cd "$PROJECT_DIR"
+        mkdir -p bin
+        make clean
+        make main OS=Windows_NT MSYS2_MINGW_DIR=/mingw64 OUT=./bin/main.exe
+        file bin/main.exe
+
+    - name: Package
+      run: |
+        cd "$PROJECT_DIR"
+        mkdir -p dist/windows-amd64
+        cp -f bin/main.exe dist/windows-amd64/
+        test -f wasm/dist/fs/cfunction.ext || { echo "missing wasm/dist/fs runtime assets"; ls -la wasm/dist/fs || true; exit 1; }
+        cp -f wasm/dist/fs/cfunction.ext dist/windows-amd64/
+        cp -R wasm/dist/fs/mythroad dist/windows-amd64/
+        test -f wasm/dist/fs/cfunction_mini.ext || { echo "missing wasm/dist/fs/cfunction_mini.ext"; ls -la wasm/dist/fs || true; exit 1; }
+        cp -f wasm/dist/fs/cfunction_mini.ext dist/windows-amd64/
+        test -f wasm/dist/fs/mythroad/cookie.mrp || { echo "missing wasm/dist/fs/mythroad/cookie.mrp"; ls -la wasm/dist/fs/mythroad || true; exit 1; }
+        cp -f wasm/dist/fs/mythroad/cookie.mrp dist/windows-amd64/mythroad/
+        cp -f /mingw64/bin/libunicorn.dll /mingw64/bin/SDL2.dll dist/windows-amd64/
+        ldd bin/main.exe | awk '/\/mingw64\/|\/ucrt64\// { print $3 }' | while read -r lib; do
+          test -n "$lib" && cp -Lf "$lib" dist/windows-amd64/
+        done
+        ls -la dist/windows-amd64/
+
+    - name: Encrypt artifact
+      run: |
+        set -euo pipefail
+        cd "$PROJECT_DIR"
+        test -n "$ARTIFACT_PASSWORD"
+        mkdir -p encrypted
+        7z a -t7z -mhe=on "-p$ARTIFACT_PASSWORD" encrypted/windows-amd64.7z dist/windows-amd64
+        mkdir -p "$WORKSPACE/artifacts"
+        cp -f encrypted/windows-amd64.7z "$WORKSPACE/artifacts/"
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-amd64-encrypted
+        path: ${{ github.workspace }}/artifacts/windows-amd64.7z
+
+  build-windows-arm64:
+    runs-on: windows-11-arm
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up MSYS2
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: CLANGARM64
+        install: >-
+          make
+          p7zip
+          mingw-w64-clang-aarch64-clang
+          mingw-w64-clang-aarch64-make
+          mingw-w64-clang-aarch64-unicorn
+          mingw-w64-clang-aarch64-SDL2
+
+    - name: Extract source
+      run: |
+        set -euo pipefail
+        test -n "$SOURCE_PASSWORD"
+        WORKSPACE="$(pwd)"
+        SOURCE_DIR="$WORKSPACE/_source"
+        echo "WORKSPACE=$WORKSPACE" >> "$GITHUB_ENV"
+        rm -rf "$SOURCE_DIR"
+        mkdir -p "$SOURCE_DIR"
+        7z x "$WORKSPACE/$SOURCE_ARCHIVE" "-p$SOURCE_PASSWORD" -o"$SOURCE_DIR" -y
+        PROJECT_DIR="$SOURCE_DIR"
+        if [ ! -f "$PROJECT_DIR/Makefile" ]; then
+          PROJECT_DIR="$(find "$SOURCE_DIR" -maxdepth 2 -name Makefile -print -quit | xargs dirname)"
+        fi
+        test -f "$PROJECT_DIR/Makefile"
+        echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+    - name: Build
+      run: |
+        cd "$PROJECT_DIR"
+        mkdir -p bin
+        make clean
+        make main OS=Windows_NT MSYS2_MINGW_DIR=/clangarm64 CC=clang OUT=./bin/main.exe
+        file bin/main.exe
+
+    - name: Package
+      run: |
+        cd "$PROJECT_DIR"
+        mkdir -p dist/windows-arm64
+        cp -f bin/main.exe dist/windows-arm64/
+        test -f wasm/dist/fs/cfunction.ext || { echo "missing wasm/dist/fs runtime assets"; ls -la wasm/dist/fs || true; exit 1; }
+        cp -f wasm/dist/fs/cfunction.ext dist/windows-arm64/
+        cp -R wasm/dist/fs/mythroad dist/windows-arm64/
+        test -f wasm/dist/fs/cfunction_mini.ext || { echo "missing wasm/dist/fs/cfunction_mini.ext"; ls -la wasm/dist/fs || true; exit 1; }
+        cp -f wasm/dist/fs/cfunction_mini.ext dist/windows-arm64/
+        test -f wasm/dist/fs/mythroad/cookie.mrp || { echo "missing wasm/dist/fs/mythroad/cookie.mrp"; ls -la wasm/dist/fs/mythroad || true; exit 1; }
+        cp -f wasm/dist/fs/mythroad/cookie.mrp dist/windows-arm64/mythroad/
+        cp -f /clangarm64/bin/libunicorn.dll /clangarm64/bin/SDL2.dll dist/windows-arm64/
+        ldd bin/main.exe | awk '/\/clangarm64\// { print $3 }' | while read -r lib; do
+          test -n "$lib" && cp -Lf "$lib" dist/windows-arm64/
+        done
+        ls -la dist/windows-arm64/
+
+    - name: Encrypt artifact
+      run: |
+        set -euo pipefail
+        cd "$PROJECT_DIR"
+        test -n "$ARTIFACT_PASSWORD"
+        mkdir -p encrypted
+        7z a -t7z -mhe=on "-p$ARTIFACT_PASSWORD" encrypted/windows-arm64.7z dist/windows-arm64
+        mkdir -p "$WORKSPACE/artifacts"
+        cp -f encrypted/windows-arm64.7z "$WORKSPACE/artifacts/"
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-arm64-encrypted
+        path: ${{ github.workspace }}/artifacts/windows-arm64.7z
