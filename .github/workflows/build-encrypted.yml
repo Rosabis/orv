@@ -581,6 +581,74 @@ jobs:
         7z a -t7z -mhe=on "-p$ARTIFACT_PASSWORD" encrypted/windows-arm64.7z dist/windows-arm64
         mkdir -p "$WORKSPACE/artifacts"
         cp -f encrypted/windows-arm64.7z "$WORKSPACE/artifacts/"
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install 7zip
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y p7zip-full
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: Setup Android NDK & SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Extract source
+      run: |
+        set -euo pipefail
+        test -n "$SOURCE_PASSWORD"
+        WORKSPACE="$(pwd)"
+        SOURCE_DIR="$WORKSPACE/_source"
+        echo "WORKSPACE=$WORKSPACE" >> "$GITHUB_ENV"
+        rm -rf "$SOURCE_DIR"
+        mkdir -p "$SOURCE_DIR"
+        7z x "$WORKSPACE/$SOURCE_ARCHIVE" "-p$SOURCE_PASSWORD" -o"$SOURCE_DIR" -y
+        PROJECT_DIR="$SOURCE_DIR"
+        if [ ! -f "$PROJECT_DIR/Makefile" ]; then
+          PROJECT_DIR="$(find "$SOURCE_DIR" -maxdepth 2 -name Makefile -print -quit | xargs dirname)"
+        fi
+        test -f "$PROJECT_DIR/Makefile"
+        echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+    - name: Build Android APK
+      run: |
+        set -euo pipefail
+        cd "$PROJECT_DIR/android"
+        gradle wrapper --gradle-version 8.5
+        chmod +x gradlew
+        ./gradlew assembleRelease --stacktrace || ./gradlew assembleDebug --stacktrace
+
+    - name: Package
+      run: |
+        set -euo pipefail
+        cd "$PROJECT_DIR"
+        DIST=dist/android
+        mkdir -p "$DIST"
+        find android/app/build/outputs/apk/ -name "*.apk" -exec cp -f {} "$DIST/" \;
+        ls -la "$DIST/"
+
+    - name: Encrypt artifact
+      run: |
+        set -euo pipefail
+        cd "$PROJECT_DIR"
+        test -n "$ARTIFACT_PASSWORD"
+        mkdir -p encrypted
+        7z a -t7z -mhe=on "-p$ARTIFACT_PASSWORD" encrypted/android.7z dist/android
+        mkdir -p "$WORKSPACE/artifacts"
+        cp -f encrypted/android.7z "$WORKSPACE/artifacts/"
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: android-encrypted
+        path: ${{ github.workspace }}/artifacts/android.7z
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
