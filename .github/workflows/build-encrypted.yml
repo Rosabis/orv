@@ -6,7 +6,7 @@ on:
     branches: [ master, main, test ]
 
 env:
-  SOURCE_ARCHIVE: cfunc.7z
+  SOURCE_ARCHIVE: orv.7z
   SOURCE_PASSWORD: ${{ secrets.SOURCE_7Z_PASSWORD }}
   ARTIFACT_PASSWORD: ${{ secrets.ARTIFACT_7Z_PASSWORD }}
 
@@ -33,6 +33,17 @@ jobs:
         echo "WORKSPACE=$WORKSPACE" >> "$GITHUB_ENV"
         rm -rf "$SOURCE_DIR"
         mkdir -p "$SOURCE_DIR"
+        if [ ! -f "$WORKSPACE/$SOURCE_ARCHIVE" ]; then
+          if [ -f "$WORKSPACE/orv.7z" ]; then
+            SOURCE_ARCHIVE=orv.7z
+          elif [ -f "$WORKSPACE/cfunc.7z" ]; then
+            SOURCE_ARCHIVE=cfunc.7z
+          else
+            SOURCE_ARCHIVE="$(basename "$(ls -1 "$WORKSPACE"/*.7z 2>/dev/null | head -n 1)")"
+          fi
+        fi
+        echo "Using source archive: $SOURCE_ARCHIVE"
+        test -f "$WORKSPACE/$SOURCE_ARCHIVE"
         7z x "$WORKSPACE/$SOURCE_ARCHIVE" "-p$SOURCE_PASSWORD" -o"$SOURCE_DIR" -y
         PROJECT_DIR="$SOURCE_DIR"
         if [ ! -f "$PROJECT_DIR/Makefile" ]; then
@@ -123,6 +134,17 @@ jobs:
         echo "WORKSPACE=$WORKSPACE" >> "$GITHUB_ENV"
         rm -rf "$SOURCE_DIR"
         mkdir -p "$SOURCE_DIR"
+        if [ ! -f "$WORKSPACE/$SOURCE_ARCHIVE" ]; then
+          if [ -f "$WORKSPACE/orv.7z" ]; then
+            SOURCE_ARCHIVE=orv.7z
+          elif [ -f "$WORKSPACE/cfunc.7z" ]; then
+            SOURCE_ARCHIVE=cfunc.7z
+          else
+            SOURCE_ARCHIVE="$(basename "$(ls -1 "$WORKSPACE"/*.7z 2>/dev/null | head -n 1)")"
+          fi
+        fi
+        echo "Using source archive: $SOURCE_ARCHIVE"
+        test -f "$WORKSPACE/$SOURCE_ARCHIVE"
         7z x "$WORKSPACE/$SOURCE_ARCHIVE" "-p$SOURCE_PASSWORD" -o"$SOURCE_DIR" -y
         PROJECT_DIR="$SOURCE_DIR"
         if [ ! -f "$PROJECT_DIR/Makefile" ]; then
@@ -211,6 +233,17 @@ jobs:
         echo "WORKSPACE=$WORKSPACE" >> "$GITHUB_ENV"
         rm -rf "$SOURCE_DIR"
         mkdir -p "$SOURCE_DIR"
+        if [ ! -f "$WORKSPACE/$SOURCE_ARCHIVE" ]; then
+          if [ -f "$WORKSPACE/orv.7z" ]; then
+            SOURCE_ARCHIVE=orv.7z
+          elif [ -f "$WORKSPACE/cfunc.7z" ]; then
+            SOURCE_ARCHIVE=cfunc.7z
+          else
+            SOURCE_ARCHIVE="$(basename "$(ls -1 "$WORKSPACE"/*.7z 2>/dev/null | head -n 1)")"
+          fi
+        fi
+        echo "Using source archive: $SOURCE_ARCHIVE"
+        test -f "$WORKSPACE/$SOURCE_ARCHIVE"
         7z x "$WORKSPACE/$SOURCE_ARCHIVE" "-p$SOURCE_PASSWORD" -o"$SOURCE_DIR" -y
         PROJECT_DIR="$SOURCE_DIR"
         if [ ! -f "$PROJECT_DIR/Makefile" ]; then
@@ -338,6 +371,17 @@ jobs:
         echo "WORKSPACE=$WORKSPACE" >> "$GITHUB_ENV"
         rm -rf "$SOURCE_DIR"
         mkdir -p "$SOURCE_DIR"
+        if [ ! -f "$WORKSPACE/$SOURCE_ARCHIVE" ]; then
+          if [ -f "$WORKSPACE/orv.7z" ]; then
+            SOURCE_ARCHIVE=orv.7z
+          elif [ -f "$WORKSPACE/cfunc.7z" ]; then
+            SOURCE_ARCHIVE=cfunc.7z
+          else
+            SOURCE_ARCHIVE="$(basename "$(ls -1 "$WORKSPACE"/*.7z 2>/dev/null | head -n 1)")"
+          fi
+        fi
+        echo "Using source archive: $SOURCE_ARCHIVE"
+        test -f "$WORKSPACE/$SOURCE_ARCHIVE"
         7z x "$WORKSPACE/$SOURCE_ARCHIVE" "-p$SOURCE_PASSWORD" -o"$SOURCE_DIR" -y
         PROJECT_DIR="$SOURCE_DIR"
         if [ ! -f "$PROJECT_DIR/Makefile" ]; then
@@ -466,6 +510,17 @@ jobs:
         echo "WORKSPACE=$WORKSPACE" >> "$GITHUB_ENV"
         rm -rf "$SOURCE_DIR"
         mkdir -p "$SOURCE_DIR"
+        if [ ! -f "$WORKSPACE/$SOURCE_ARCHIVE" ]; then
+          if [ -f "$WORKSPACE/orv.7z" ]; then
+            SOURCE_ARCHIVE=orv.7z
+          elif [ -f "$WORKSPACE/cfunc.7z" ]; then
+            SOURCE_ARCHIVE=cfunc.7z
+          else
+            SOURCE_ARCHIVE="$(basename "$(ls -1 "$WORKSPACE"/*.7z 2>/dev/null | head -n 1)")"
+          fi
+        fi
+        echo "Using source archive: $SOURCE_ARCHIVE"
+        test -f "$WORKSPACE/$SOURCE_ARCHIVE"
         7z x "$WORKSPACE/$SOURCE_ARCHIVE" "-p$SOURCE_PASSWORD" -o"$SOURCE_DIR" -y
         PROJECT_DIR="$SOURCE_DIR"
         if [ ! -f "$PROJECT_DIR/Makefile" ]; then
@@ -545,6 +600,17 @@ jobs:
         echo "WORKSPACE=$WORKSPACE" >> "$GITHUB_ENV"
         rm -rf "$SOURCE_DIR"
         mkdir -p "$SOURCE_DIR"
+        if [ ! -f "$WORKSPACE/$SOURCE_ARCHIVE" ]; then
+          if [ -f "$WORKSPACE/orv.7z" ]; then
+            SOURCE_ARCHIVE=orv.7z
+          elif [ -f "$WORKSPACE/cfunc.7z" ]; then
+            SOURCE_ARCHIVE=cfunc.7z
+          else
+            SOURCE_ARCHIVE="$(basename "$(ls -1 "$WORKSPACE"/*.7z 2>/dev/null | head -n 1)")"
+          fi
+        fi
+        echo "Using source archive: $SOURCE_ARCHIVE"
+        test -f "$WORKSPACE/$SOURCE_ARCHIVE"
         7z x "$WORKSPACE/$SOURCE_ARCHIVE" "-p$SOURCE_PASSWORD" -o"$SOURCE_DIR" -y
         PROJECT_DIR="$SOURCE_DIR"
         if [ ! -f "$PROJECT_DIR/Makefile" ]; then
@@ -632,6 +698,17 @@ jobs:
         echo "WORKSPACE=$WORKSPACE" >> "$GITHUB_ENV"
         rm -rf "$SOURCE_DIR"
         mkdir -p "$SOURCE_DIR"
+        if [ ! -f "$WORKSPACE/$SOURCE_ARCHIVE" ]; then
+          if [ -f "$WORKSPACE/orv.7z" ]; then
+            SOURCE_ARCHIVE=orv.7z
+          elif [ -f "$WORKSPACE/cfunc.7z" ]; then
+            SOURCE_ARCHIVE=cfunc.7z
+          else
+            SOURCE_ARCHIVE="$(basename "$(ls -1 "$WORKSPACE"/*.7z 2>/dev/null | head -n 1)")"
+          fi
+        fi
+        echo "Using source archive: $SOURCE_ARCHIVE"
+        test -f "$WORKSPACE/$SOURCE_ARCHIVE"
         7z x "$WORKSPACE/$SOURCE_ARCHIVE" "-p$SOURCE_PASSWORD" -o"$SOURCE_DIR" -y
         PROJECT_DIR="$SOURCE_DIR"
         if [ ! -f "$PROJECT_DIR/Makefile" ]; then
