@@ -724,12 +724,23 @@ jobs:
         path: ${{ env.PROJECT_DIR }}/android/third_party
         key: android-native-sdl2-2.30.11-unicorn-2.1.4
 
+    - name: Set up Gradle
+      uses: gradle/actions/setup-gradle@v4
+
     - name: Build Android APK
       run: |
         set -euo pipefail
         cd "$PROJECT_DIR/android"
         chmod +x gradlew
-        ./gradlew assembleRelease --stacktrace
+        n=0
+        until ./gradlew assembleRelease --stacktrace; do
+          n=$((n+1))
+          if [ "$n" -ge 4 ]; then
+            exit 1
+          fi
+          echo "gradle failed (attempt $n), retrying in 25s..."
+          sleep 25
+        done
 
     - name: Package
       run: |
