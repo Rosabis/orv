@@ -6,7 +6,7 @@ on:
     branches: [ master, main, test ]
 
 env:
-  SOURCE_ARCHIVE: orv.7z
+  SOURCE_ARCHIVE: cfunc.7z
   SOURCE_PASSWORD: ${{ secrets.SOURCE_7Z_PASSWORD }}
   ARTIFACT_PASSWORD: ${{ secrets.ARTIFACT_7Z_PASSWORD }}
 
@@ -597,14 +597,31 @@ jobs:
 
   build-android:
     runs-on: ubuntu-latest
+    timeout-minutes: 360
     steps:
     - uses: actions/checkout@v4
+
+    - name: Install p7zip
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo apt-get update -q
+        sudo apt-get install -yq --no-install-recommends p7zip-full
 
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '17'
+
+    - name: Set up Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Install NDK and CMake
+      run: |
+        set -euo pipefail
+        sdkmanager --install "ndk;26.3.11579264" "cmake;3.22.1" "platforms;android-34" "build-tools;34.0.0"
+        yes | sdkmanager --licenses || true
 
     - name: Extract source
       run: |
@@ -621,16 +638,21 @@ jobs:
           PROJECT_DIR="$(find "$SOURCE_DIR" -maxdepth 2 -name Makefile -print -quit | xargs dirname)"
         fi
         test -f "$PROJECT_DIR/Makefile"
+        test -d "$PROJECT_DIR/android"
         echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+    - name: Cache Android native deps
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.PROJECT_DIR }}/android/third_party
+        key: android-native-sdl2-2.30.11-unicorn-2.1.4
 
     - name: Build Android APK
       run: |
         set -euo pipefail
         cd "$PROJECT_DIR/android"
-        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
-        gradle wrapper --gradle-version 8.5
         chmod +x gradlew
-        ./gradlew assembleRelease --stacktrace || ./gradlew assembleDebug --stacktrace
+        ./gradlew assembleRelease --stacktrace
 
     - name: Package
       run: |
