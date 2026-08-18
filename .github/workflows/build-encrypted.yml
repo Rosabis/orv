@@ -17,9 +17,12 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Install dependencies
+      env:
+        DEBIAN_FRONTEND: noninteractive
       run: |
-        sudo apt-get update
-        sudo apt-get install -y gcc make patchelf libunicorn-dev libsdl2-dev p7zip-full
+        sudo apt-get update -q
+        sudo apt-get install -yq --no-install-recommends gcc make patchelf libunicorn-dev libsdl2-dev p7zip-full
+
 
     - name: Extract source
       run: |
@@ -581,24 +584,30 @@ jobs:
         7z a -t7z -mhe=on "-p$ARTIFACT_PASSWORD" encrypted/windows-arm64.7z dist/windows-arm64
         mkdir -p "$WORKSPACE/artifacts"
         cp -f encrypted/windows-arm64.7z "$WORKSPACE/artifacts/"
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-arm64-encrypted
+        path: ${{ github.workspace }}/artifacts/windows-arm64.7z
+
   build-android:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
 
     - name: Install 7zip
+      env:
+        DEBIAN_FRONTEND: noninteractive
       run: |
-        sudo apt-get update
-        sudo apt-get install -y p7zip-full
+        sudo apt-get update -q
+        sudo apt-get install -yq --no-install-recommends p7zip-full
 
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '17'
-
-    - name: Setup Android NDK & SDK
-      uses: android-actions/setup-android@v3
 
     - name: Extract source
       run: |
@@ -621,6 +630,8 @@ jobs:
       run: |
         set -euo pipefail
         cd "$PROJECT_DIR/android"
+        # 自动接受 Android SDK 协议并使用系统预装 NDK
+        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
         gradle wrapper --gradle-version 8.5
         chmod +x gradlew
         ./gradlew assembleRelease --stacktrace || ./gradlew assembleDebug --stacktrace
@@ -650,8 +661,3 @@ jobs:
         name: android-encrypted
         path: ${{ github.workspace }}/artifacts/android.7z
 
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: windows-arm64-encrypted
-        path: ${{ github.workspace }}/artifacts/windows-arm64.7z
