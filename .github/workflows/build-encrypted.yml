@@ -724,8 +724,13 @@ jobs:
         path: ${{ env.PROJECT_DIR }}/android/third_party
         key: android-native-sdl2-2.30.11-unicorn-2.1.4
 
+    - name: Drop unused SDL Gradle wrapper
+      run: rm -rf "$PROJECT_DIR/android/third_party/SDL2/android-project/gradle"
+
     - name: Set up Gradle
       uses: gradle/actions/setup-gradle@v4
+      with:
+        validate-wrappers: false
 
     - name: Build Android APK
       run: |
