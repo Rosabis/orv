@@ -106,9 +106,13 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Install dependencies
+      env:
+        DEBIAN_FRONTEND: noninteractive
       run: |
-        sudo apt-get update
-        sudo apt-get install -y gcc make patchelf libunicorn-dev libsdl2-dev p7zip-full
+        sudo sed -i 's/azure.archive.ubuntu.com/archive.ubuntu.com/g' /etc/apt/sources.list /etc/apt/sources.list.d/* 2>/dev/null || true
+        sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=10 update
+        sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=10 install -y --no-install-recommends gcc make patchelf libunicorn-dev libsdl2-dev
+
 
     - name: Extract source
       run: |
@@ -596,13 +600,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install 7zip
-      env:
-        DEBIAN_FRONTEND: noninteractive
-      run: |
-        sudo apt-get update -q
-        sudo apt-get install -yq --no-install-recommends p7zip-full
-
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
@@ -630,7 +627,6 @@ jobs:
       run: |
         set -euo pipefail
         cd "$PROJECT_DIR/android"
-        # 自动接受 Android SDK 协议并使用系统预装 NDK
         yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
         gradle wrapper --gradle-version 8.5
         chmod +x gradlew
@@ -660,4 +656,5 @@ jobs:
       with:
         name: android-encrypted
         path: ${{ github.workspace }}/artifacts/android.7z
+
 
